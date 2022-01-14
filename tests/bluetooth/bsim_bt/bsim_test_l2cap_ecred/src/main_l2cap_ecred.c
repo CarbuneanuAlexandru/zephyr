@@ -522,17 +522,23 @@ static void test_tick(bs_time_t HW_device_time)
 {
 }
 
-static const struct bst_test_instance test_def[] = { { .test_id = "peripheral",
-						       .test_descr = "Peripheral L2CAP ECRED",
-						       .test_post_init_f = test_init,
-						       .test_tick_f = test_tick,
-						       .test_main_f = test_peripheral_main },
-						     { .test_id = "central",
-						       .test_descr = "Central L2CAP ECRED",
-						       .test_post_init_f = test_init,
-						       .test_tick_f = test_tick,
-						       .test_main_f = test_central_main },
-						     BSTEST_END_MARKER };
+static const struct bst_test_instance test_def[] = { 
+	{ 
+		.test_id = "peripheral",
+		.test_descr = "Peripheral L2CAP ECRED",
+		.test_post_init_f = test_init,
+		.test_tick_f = test_tick,
+		.test_main_f = test_peripheral_main 
+	},
+	{ 
+		.test_id = "central",
+		.test_descr = "Central L2CAP ECRED",
+		.test_post_init_f = test_init,
+		.test_tick_f = test_tick,
+		.test_main_f = test_central_main 
+	},
+	BSTEST_END_MARKER 
+};
 
 struct bst_test_list *test_main_l2cap_ecred_install(struct bst_test_list *tests)
 {
