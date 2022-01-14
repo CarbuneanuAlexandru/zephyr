@@ -12,12 +12,10 @@ endif()
 find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 project(bsim_test_l2cap_ecred)
 
-
 target_sources(app PRIVATE
   src/main.c
   src/main_l2cap_ecred.c
 )
-
 
 zephyr_include_directories(
   $ENV{BSIM_COMPONENTS_PATH}/libUtilv1/src/
