@@ -136,10 +136,12 @@ static int chan_recv_cb(struct bt_l2cap_chan *l2cap_chan, struct net_buf *buf)
 	if (received_iterration != chan->sdus_received) {
 		FAIL("Received out of sequence data.");
 	}
+	
 	int retval = memcmp(buf->data + sizeof(int), chan->payload + sizeof(int), buf->len - sizeof(int));
 	if (retval) {
 		FAIL("Payload received didn't match expected value memcmp returned %i", retval);
 	}
+	
 	if (chan->chan_id == 0) {
 		/*By the time we rx on chan 0, we should have alrady received on chan1*/
 		if ((channels[1].sdus_received != (channels[0].sdus_received + 1))) {
