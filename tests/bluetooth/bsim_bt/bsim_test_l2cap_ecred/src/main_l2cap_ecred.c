@@ -113,7 +113,7 @@ static struct channel *get_free_channel(void)
 		(void)memset(chan, 0, sizeof(*chan));
 		chan->chan_id = idx;
 		channels[idx].in_use = true;
-		memset(chan->payload, idx, sizeof(chan->payload));
+		(void)memset(chan->payload, idx, sizeof(chan->payload));
 		k_work_init(&chan->work, send_sdu_chan_worker);
 		return chan;
 	}
