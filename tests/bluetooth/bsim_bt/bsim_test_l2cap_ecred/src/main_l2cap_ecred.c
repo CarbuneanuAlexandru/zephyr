@@ -150,7 +150,9 @@ static int chan_recv_cb(struct bt_l2cap_chan *l2cap_chan, struct net_buf *buf)
 			     channels[1].sdus_received);
 		}
 	}
+	
 	chan->sdus_received++;
+	
 	return 0;
 }
 
