@@ -19,6 +19,7 @@
 #include "bs_types.h"
 #include "bs_tracing.h"
 #include "bstests.h"
+#include "bs_pc_backchannel.h"
 
 #define LOG_MODULE_NAME main_l2cap_ecred
 #include <logging/log.h>
@@ -80,6 +81,7 @@ static struct channel {
 	uint8_t payload[DATA_MTU];
 } channels[L2CAP_CHANNELS];
 CREATE_FLAG(is_connected);
+CREATE_FLAG(start_read);
 #define MY_STACK_SIZE 512
 #define MY_PRIORITY 5
 
@@ -121,16 +123,46 @@ static struct channel *get_free_channel(void)
 	return NULL;
 }
 
+/*call in init functions*/
+void device_sync_init(uint device_nbr)
+{
+    uint peer = 0;
+    if (device_nbr == 0) {
+        peer = 1;
+    }
+    uint dev_nbrs[1] = {peer};
+    uint channel_nbrs[1] = {0};
+    uint *ch = bs_open_back_channel(device_nbr, dev_nbrs, channel_nbrs, 1);
+    if (!ch) {
+        LOG_ERR("bs_open_back_channel failed!");
+    }
+}
+/*Call it to make peer to proceed.*/
+void device_sync_send(void)
+{
+    uint8_t msg[1] = "S";
+    bs_bc_send_msg(0, msg, 1);
+}
+/* Wait until peer send sync*/
+void device_sync_wait(void)
+{
+    while(!bs_bc_is_msg_received(0)) {
+        k_sleep(K_MSEC(1000));
+    }
+}
+
 static struct net_buf *chan_alloc_buf_cb(struct bt_l2cap_chan *chan)
 {
 	LOG_DBG("Allocated on chan %p", chan);
 	return net_buf_alloc(&rx_data_pool, K_FOREVER);
 }
 
+static volatile int data_receive = 0;
 static int chan_recv_cb(struct bt_l2cap_chan *l2cap_chan, struct net_buf *buf)
 {
 	struct channel *chan = CONTAINER_OF(l2cap_chan, struct channel, le);
 	int received_iterration = *((int *)(buf->data));
+	data_receive = 1;
 
 	LOG_DBG("received_iterration %i sdus_receied %i, chan_id: %d, data_length: %d", received_iterration,  chan->sdus_received, chan->chan_id, buf->len);
 	if (received_iterration != chan->sdus_received) {
@@ -156,10 +188,11 @@ static int chan_recv_cb(struct bt_l2cap_chan *l2cap_chan, struct net_buf *buf)
 	return 0;
 }
 
+static volatile int data_sent = 0;
 static void chan_sent_cb(struct bt_l2cap_chan *l2cap_chan)
 {
-	struct channel *chan = CONTAINER_OF(l2cap_chan, struct channel, le);
-
+	struct channel *chan = CONTAINER_OF(l2cap_chan, struct channel, le); 
+	data_sent = 1;
 	chan->buf = 0;
 
 	LOG_DBG("chan_id: %d", chan->chan_id);
@@ -397,9 +430,11 @@ static void send_sdu(int itteration, int chan_idx, int bytes)
 static void test_peripheral_main(void)
 {
 	int err;
+	UNSET_FLAG(start_read);
 
 	LOG_DBG("*L2CAP ECRED Peripheral started*");
 	init_workqs();
+	device_sync_init(1);
 	err = bt_enable(NULL);
 	if (err) {
 		FAIL("Can't enable Bluetooth (err %d)", err);
@@ -426,7 +461,7 @@ static void test_peripheral_main(void)
 
 	connect_num_channels(L2CAP_CHANNELS);
 
-	k_sleep(K_MSEC(500));
+	k_sleep(K_MSEC(500));/*
 	for (int i = 0; i < SDU_SEND_COUNT; i++) {
 		LOG_DBG("Matv: Iteration %i Sendign on chan0", i);
 		channels[0].itteration = i;
@@ -437,7 +472,23 @@ static void test_peripheral_main(void)
 		channels[1].bytes_to_send = DATA_MPS - 2;
 		k_work_submit_to_queue(&my_work_q1, &channels[1].work);
 		k_sleep(K_MSEC(5000));
-	}
+	}*/
+
+	/* Read from both devices (Central and Peripheral) at the same time ***************************/
+	data_sent = 0;
+	data_receive = 0;
+	LOG_DBG("Sending first sync");	
+	device_sync_send();
+	channels[0].itteration = 0;
+	channels[0].bytes_to_send = DATA_MTU - 500;
+	k_work_submit_to_queue(&my_work_q0, &channels[0].work);
+	
+	while (!(data_sent == 1 && data_receive == 1))
+		k_sleep(K_MSEC(1));
+
+	LOG_DBG("Sending seccond sync");	
+	device_sync_send();	
+
 
 	disconnect_all_channels();
 	/* Disconnect */
@@ -489,6 +540,7 @@ static void test_central_main(void)
 	LOG_DBG("*L2CAP ECRED Central started*");
 
 	err = bt_enable(NULL);
+	device_sync_init(0);
 	if (err) {
 		FAIL("Can't enable Bluetooth (err %d)\n", err);
 		return;
@@ -507,12 +559,25 @@ static void test_central_main(void)
 	WAIT_FOR_FLAG_SET(is_connected);
 	LOG_DBG("Central Connected.\n");
 	register_l2cap_server();
+
+	/* Read from both devices (Central and Peripheral) at the same time ***************************/
+	LOG_DBG("Wait for sync 1...");
+	device_sync_wait();
+	LOG_DBG("got sync 1");
+	channels[0].itteration = 0;
+	channels[0].bytes_to_send = DATA_MTU - 500;
+	k_work_submit_to_queue(&my_work_q0, &channels[0].work);
+	LOG_DBG("Wait for sync 2...");
+	device_sync_wait();
+	LOG_DBG("got sync 2");
+
 	/* Wait for disconnect */
 	WAIT_FOR_FLAG_UNSET(is_connected);
 	LOG_DBG("received PDUs on chan0 %i and chan1 %i", channels[0].sdus_received, channels[1].sdus_received);
 	if (channels[0].sdus_received < SDU_SEND_COUNT || channels[1].sdus_received < SDU_SEND_COUNT) {
 		FAIL("received less than %i", SDU_SEND_COUNT);
 	}
+
 	LOG_DBG("Central Disconnected.");
 
 	PASS("L2CAP ECRED Central tests Passed\n");
@@ -548,3 +613,4 @@ struct bst_test_list *test_main_l2cap_ecred_install(struct bst_test_list *tests)
 {
 	return bst_add_tests(tests, test_def);
 }
+
