@@ -4,12 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/conn.h>
+#include <bluetooth/att.h>
 #include "common.h"
 
 extern enum bst_result_t bst_result;
 
 CREATE_FLAG(flag_is_connected);
-
 static struct bt_conn *t_conn;
 
 static void connected(struct bt_conn *conn, uint8_t err)
@@ -55,12 +57,35 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 static void test_main(void)
 {
 	int err;
+	const struct bt_data ad[] = {
+		BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR))
+	};
 
-	////
+	err = bt_enable(NULL);
+	if (err != 0) {
+		FAIL("Bluetooth init failed (err %d)\n", err);
+		return;
+	}
+
+	printk("Bluetooth initialized\n");
+
+	err = bt_le_adv_start(BT_LE_ADV_CONN_NAME, ad, ARRAY_SIZE(ad), NULL, 0);
+	if (err != 0) {
+		FAIL("Advertising failed to start (err %d)\n", err);
+		return;
+	}
 
 	printk("Advertising successfully started\n");
 
-	PASS("GATT server passed\n");
+	WAIT_FOR_FLAG(flag_is_connected);
+
+	err = bt_eatt_connect(default_conn, CONFIG_BT_EATT_MAX);
+	if (err) {
+		FAIL("Sending credit based connection request failed (err %d)\n", err);
+	}
+
+
+	PASS("EATT server passed\n");
 }
 
 static const struct bst_test_instance test_server[] = {
