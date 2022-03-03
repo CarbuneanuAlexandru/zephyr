@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Copyright (c) 2022 Nordic Semiconductor
+# Copyright 2022 Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
 
-simulation_id="notification"
+# Basic GATT test: A central acting as a GATT client scans for and connects
+# to a peripheral acting as a GATT server. The GATT client will then attempt
+# to write and read to and from a few GATT characteristics.
+simulation_id="gatt"
 verbosity_level=2
 process_ids=""; exit_code=0
 
@@ -22,14 +25,14 @@ BOARD="${BOARD:-nrf52_bsim}"
 
 cd ${BSIM_OUT_PATH}/bin
 
-Execute ./bs_${BOARD}_tests_bluetooth_bsim_bt_bsim_test_eatt_prj_notif_conf \
-  -v=${verbosity_level} -s=${simulation_id} -d=0 -testid=central
+Execute ./bs_${BOARD}_tests_bluetooth_bsim_bt_bsim_test_eatt_notif_prj_conf \
+  -v=${verbosity_level} -s=${simulation_id} -d=0 -testid=client
 
-Execute ./bs_${BOARD}_tests_bluetooth_bsim_bt_bsim_test_eatt_prj_notif_conf \
-  -v=${verbosity_level} -s=${simulation_id} -d=1 -testid=peripheral
+Execute ./bs_${BOARD}_tests_bluetooth_bsim_bt_bsim_test_eatt_notif_prj_conf \
+  -v=${verbosity_level} -s=${simulation_id} -d=1 -testid=server
 
 Execute ./bs_2G4_phy_v1 -v=${verbosity_level} -s=${simulation_id} \
-  -D=2 -sim_length=200e6 $@
+  -D=2 -sim_length=60e6 $@
 
 for process_id in $process_ids; do
   wait $process_id || let "exit_code=$?"

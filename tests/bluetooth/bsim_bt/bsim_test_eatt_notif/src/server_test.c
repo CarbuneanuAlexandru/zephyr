@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <bluetooth/bluetooth.h>
+#include "common.h"
 #include <bluetooth/conn.h>
 #include <bluetooth/att.h>
-#include "common.h"
 
 extern enum bst_result_t bst_result;
 
 CREATE_FLAG(flag_is_connected);
-static struct bt_conn *t_conn;
+
+static struct bt_conn *g_conn;
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
@@ -27,7 +27,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 	printk("Connected to %s\n", addr);
 
-	t_conn = conn;
+	g_conn = conn;
 	SET_FLAG(flag_is_connected);
 }
 
@@ -35,7 +35,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
-	if (conn != t_conn) {
+	if (conn != g_conn) {
 		return;
 	}
 
@@ -43,9 +43,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 	printk("Disconnected: %s (reason 0x%02x)\n", addr, reason);
 
-	bt_conn_unref(t_conn);
+	bt_conn_unref(g_conn);
 
-	t_conn = NULL;
+	g_conn = NULL;
 	UNSET_FLAG(flag_is_connected);
 }
 
@@ -78,14 +78,13 @@ static void test_main(void)
 	printk("Advertising successfully started\n");
 
 	WAIT_FOR_FLAG(flag_is_connected);
-
-	err = bt_eatt_connect(default_conn, CONFIG_BT_EATT_MAX);
+/*
+	err = bt_eatt_connect(g_conn, 1);
 	if (err) {
 		FAIL("Sending credit based connection request failed (err %d)\n", err);
-	}
+	}*/
 
-
-	PASS("EATT server passed\n");
+	PASS("GATT server passed\n");
 }
 
 static const struct bst_test_instance test_server[] = {
