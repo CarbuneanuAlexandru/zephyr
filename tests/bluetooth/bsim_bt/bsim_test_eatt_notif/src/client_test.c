@@ -98,15 +98,14 @@ void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	}
 }
 
-void send_notification(void)
+int send_notification(void)
 {
 	uint8_t sample_dat = SAMPLE_DATA;
 	int err;
 
 	err = bt_gatt_notify(g_conn, local_attr, &sample_dat, sizeof(sample_dat));
-	if (err) {
-		printk("GATT notify failed (err %d)\n", err);
-	}
+
+	return err;
 }
 
 static uint8_t discover_func(struct bt_conn *conn,
@@ -151,27 +150,34 @@ static void test_main(void)
 	err = bt_enable(NULL);
 	if (err != 0) {
 		FAIL("Bluetooth discover failed (err %d)\n", err);
+		return;
 	}
 
 	err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
 	if (err != 0) {
 		FAIL("Scanning failed to start (err %d)\n", err);
+		return;
 	}
 
 	printk("Scanning successfully started\n");
 
 	WAIT_FOR_FLAG(flag_is_connected);
 
-	err = bt_eatt_connect(g_conn, CONFIG_BT_EATT_MAX);
+	err = bt_eatt_connect(g_conn, 5);
 	if (err) {
 		FAIL("Sending credit based connection request failed (err %d)\n", err);
+		return;
 	}
 
 	local_attr = &g_svc.attrs[1];
 	printk("############# Notification test\n");
 	for (int indx = 0; indx < NUM_NOTIF; indx++) {
 		printk("Notification %d\n", indx);
-		send_notification();
+		err = send_notification();
+		if (err) {
+			FAIL("GATT notify failed (err %d)\n", err);
+			return;
+		}
 	}
 
 	printk("############# Disconnect one by one and reconnect\n");
@@ -181,16 +187,22 @@ static void test_main(void)
 	}
 
 	printk("Reconnecting bearers\n");
-	err = bt_eatt_connect(g_conn, EATT_BEARERS_TEST);
+	err = bt_eatt_connect(g_conn, 5);
 	if (err) {
 		FAIL("Sending credit based connection request failed (err %d)\n", err);
+		return;
 	}
 
 	printk("############# Send notifications during discovery request\n");
 	gatt_discover();
 	while (!TEST_FLAG(flag_discover_complete)) {
 		printk("Notifying...\n");
-		send_notification();
+		err = send_notification();
+		printk("error###### %d \n", err);
+		if (err) {
+			FAIL("GATT notify failed (err %d)\n", err);
+			return;
+		}
 	}
 
 	printk("Send sync to contine\n");

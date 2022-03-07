@@ -83,11 +83,6 @@ static void test_main(void)
 
 	printk("Wait for sync\n");
 	device_sync_wait();
-/*
-	err = bt_eatt_connect(g_conn, 1);
-	if (err) {
-		FAIL("Sending credit based connection request failed (err %d)\n", err);
-	}*/
 
 	PASS("GATT server passed\n");
 }
