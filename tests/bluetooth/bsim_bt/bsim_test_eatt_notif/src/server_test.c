@@ -61,6 +61,8 @@ static void test_main(void)
 		BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR))
 	};
 
+	device_sync_init(CENTRAL_ID);
+
 	err = bt_enable(NULL);
 	if (err != 0) {
 		FAIL("Bluetooth init failed (err %d)\n", err);
@@ -78,6 +80,9 @@ static void test_main(void)
 	printk("Advertising successfully started\n");
 
 	WAIT_FOR_FLAG(flag_is_connected);
+
+	printk("Wait for sync\n");
+	device_sync_wait();
 /*
 	err = bt_eatt_connect(g_conn, 1);
 	if (err) {

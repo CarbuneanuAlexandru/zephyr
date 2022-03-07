@@ -12,13 +12,19 @@
 #include "common.h"
 
 CREATE_FLAG(flag_is_connected);
+CREATE_FLAG(flag_discover_complete);
 
 static struct bt_conn *g_conn;
 static const struct bt_gatt_attr *local_attr;
 
+//static uint16_t chrc_handle;
+//static uint16_t long_chrc_handle;
+static struct bt_uuid *test_svc_uuid = TEST_SERVICE_UUID;
+
 #define ARRAY_ITEM(i, _) i,
 #define NUM_NOTIF 100
 #define SAMPLE_DATA 1
+#define EATT_BEARERS_TEST 1
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
@@ -103,6 +109,34 @@ void send_notification(void)
 	}
 }
 
+static uint8_t discover_func(struct bt_conn *conn,
+		const struct bt_gatt_attr *attr,
+		struct bt_gatt_discover_params *params)
+{
+	SET_FLAG(flag_discover_complete);
+	printk("Discover complete\n");
+	return BT_GATT_ITER_STOP;
+}
+
+static void gatt_discover(void)
+{
+	static struct bt_gatt_discover_params discover_params;
+	int err;
+
+	printk("Discovering services and characteristics\n");
+
+	discover_params.uuid = test_svc_uuid;
+	discover_params.func = discover_func;
+	discover_params.start_handle = BT_ATT_FIRST_ATTRIBUTE_HANDLE;
+	discover_params.end_handle = BT_ATT_LAST_ATTRIBUTE_HANDLE;
+	discover_params.type = BT_GATT_DISCOVER_PRIMARY;
+
+	err = bt_gatt_discover(g_conn, &discover_params);
+	if (err != 0) {
+		FAIL("Discover failed(err %d)\n", err);
+	}
+}
+
 BT_GATT_SERVICE_DEFINE(g_svc,
 	BT_GATT_PRIMARY_SERVICE(TEST_SERVICE_UUID),
 	BT_GATT_CHARACTERISTIC(TEST_CHRC_UUID, BT_GATT_CHRC_NOTIFY,
@@ -111,6 +145,8 @@ BT_GATT_SERVICE_DEFINE(g_svc,
 static void test_main(void)
 {
 	int err;
+
+	device_sync_init(PERIPHERAL_ID);
 
 	err = bt_enable(NULL);
 	if (err != 0) {
@@ -126,17 +162,39 @@ static void test_main(void)
 
 	WAIT_FOR_FLAG(flag_is_connected);
 
-	err = bt_eatt_connect(g_conn, 1);
+	err = bt_eatt_connect(g_conn, CONFIG_BT_EATT_MAX);
 	if (err) {
 		FAIL("Sending credit based connection request failed (err %d)\n", err);
 	}
 
 	local_attr = &g_svc.attrs[1];
-	printk("############# Notification EATT test\n");
+	printk("############# Notification test\n");
 	for (int indx = 0; indx < NUM_NOTIF; indx++) {
 		printk("Notification %d\n", indx);
 		send_notification();
 	}
+
+	printk("############# Disconnect one by one and reconnect\n");
+	for (int indx = 0; indx < CONFIG_BT_EATT_MAX; indx++) {
+		printk("Disconnecting bearer num %d\n", indx);
+		bt_eatt_disconnect_one(g_conn);
+	}
+
+	printk("Reconnecting bearers\n");
+	err = bt_eatt_connect(g_conn, EATT_BEARERS_TEST);
+	if (err) {
+		FAIL("Sending credit based connection request failed (err %d)\n", err);
+	}
+
+	printk("############# Send notifications during discovery request\n");
+	gatt_discover();
+	while (!TEST_FLAG(flag_discover_complete)) {
+		printk("Notifying...\n");
+		send_notification();
+	}
+
+	printk("Send sync to contine\n");
+	device_sync_send();
 
 	PASS("GATT client Passed\n");
 }

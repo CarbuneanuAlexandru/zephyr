@@ -23,6 +23,7 @@
 #include <bluetooth/conn.h>
 #include <bluetooth/uuid.h>
 #include <bluetooth/gatt.h>
+#include "bs_pc_backchannel.h"
 
 extern enum bst_result_t bst_result;
 
@@ -31,6 +32,7 @@ extern enum bst_result_t bst_result;
 #define CREATE_FLAG(flag) static atomic_t flag = (atomic_t)false
 #define SET_FLAG(flag) (void)atomic_set(&flag, (atomic_t)true)
 #define UNSET_FLAG(flag) (void)atomic_set(&flag, (atomic_t)false)
+#define TEST_FLAG(flag) (atomic_get(&flag) == (atomic_t)true)
 #define WAIT_FOR_FLAG(flag) \
 	while (!(bool)atomic_get(&flag)) { \
 		(void)k_sleep(K_MSEC(1)); \
@@ -63,5 +65,12 @@ extern enum bst_result_t bst_result;
 	BT_UUID_DECLARE_128(0x01, 0x23, 0x45, 0x67, 0x89, 0x01, 0x02, 0x03, \
 			    0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xFF, 0x11)
 
+#define CENTRAL_ID 0
+#define PERIPHERAL_ID 1
+#define BACK_CHANNELS 1
+
 void test_tick(bs_time_t HW_device_time);
 void test_init(void);
+void device_sync_init(uint device_nbr);
+void device_sync_send(void);
+void device_sync_wait(void);
