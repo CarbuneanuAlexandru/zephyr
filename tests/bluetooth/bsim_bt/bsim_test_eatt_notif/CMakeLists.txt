@@ -10,16 +10,10 @@ if (NOT DEFINED ENV{BSIM_COMPONENTS_PATH})
 endif()
 
 find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
-project(bsim_test_host)
+project(bsim_test_eatt_notif)
 
-
-target_sources(app PRIVATE
-  src/common.c
-  src/main_collision.c
-  src/main_autoconnect.c
-  src/main.c
-)
-
+FILE(GLOB app_sources src/*.c)
+target_sources(app PRIVATE ${app_sources} )
 
 zephyr_include_directories(
   $ENV{BSIM_COMPONENTS_PATH}/libUtilv1/src/

@@ -1,4 +1,4 @@
-/* main_collision.c - Application main entry point */
+/* main_connect.c - Application main entry point */
 
 /*
  * Copyright (c) 2022 Nordic Semiconductor
@@ -10,14 +10,7 @@
 
 static void test_peripheral_main(void)
 {
-	int err;
-
 	peripheral_setup_and_connect();
-
-	err = bt_eatt_connect(default_conn, CONFIG_BT_EATT_MAX);
-	if (err) {
-		FAIL("Sending credit based connection request failed (err %d)\n", err);
-	}
 
 	while (num_eatt_channels < CONFIG_BT_EATT_MAX) {
 		k_sleep(K_MSEC(10));
@@ -30,14 +23,7 @@ static void test_peripheral_main(void)
 
 static void test_central_main(void)
 {
-	int err;
-
 	central_setup_and_connect();
-
-	err = bt_eatt_connect(default_conn, CONFIG_BT_EATT_MAX);
-	if (err) {
-		FAIL("Sending credit based connection request failed (err %d)\n", err);
-	}
 
 	while (num_eatt_channels < CONFIG_BT_EATT_MAX) {
 		k_sleep(K_MSEC(10));
@@ -50,15 +36,15 @@ static void test_central_main(void)
 
 static const struct bst_test_instance test_def[] = {
 	{
-		.test_id = "peripheral",
-		.test_descr = "Peripheral Collision",
+		.test_id = "peripheral_autoconnect",
+		.test_descr = "Peripheral autoconnect",
 		.test_post_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_peripheral_main,
 	},
 	{
-		.test_id = "central",
-		.test_descr = "Central Collision",
+		.test_id = "central_autoconnect",
+		.test_descr = "Central autoconnect",
 		.test_post_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_central_main,
@@ -66,7 +52,7 @@ static const struct bst_test_instance test_def[] = {
 	BSTEST_END_MARKER,
 };
 
-struct bst_test_list *test_main_collision_install(struct bst_test_list *tests)
+struct bst_test_list *test_main_autoconnect_install(struct bst_test_list *tests)
 {
 	return bst_add_tests(tests, test_def);
 }

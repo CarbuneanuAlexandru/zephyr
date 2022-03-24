@@ -123,6 +123,8 @@ static bt_att_chan_sent_t chan_cb(struct net_buf *buf);
 static bt_conn_tx_cb_t att_cb(bt_att_chan_sent_t cb);
 
 static void att_chan_mtu_updated(struct bt_att_chan *updated_chan);
+static void att_chan_connected(struct bt_att_chan *att_chan);
+static void att_chan_disconnected(struct bt_att_chan *att_chan);
 static void bt_att_disconnected(struct bt_l2cap_chan *chan);
 
 void att_sent(struct bt_conn *conn, void *user_data)
@@ -134,6 +136,13 @@ void att_sent(struct bt_conn *conn, void *user_data)
 	if (chan->ops->sent) {
 		chan->ops->sent(chan);
 	}
+}
+
+static sys_slist_t callback_list;
+
+void bt_eatt_cb_register(struct bt_eatt_cb *cb)
+{
+	sys_slist_append(&callback_list, &cb->node);
 }
 
 /* In case of success the ownership of the buffer is transferred to the stack
@@ -2630,6 +2639,12 @@ static void att_reset(struct bt_att *att)
 	}
 #endif /* CONFIG_BT_ATT_PREPARE_COUNT > 0 */
 
+#if defined(CONFIG_BT_EATT)
+	struct k_work_sync sync;
+
+	(void)k_work_cancel_delayable_sync(&att->connection_work, &sync);
+#endif /* CONFIG_BT_EATT */
+
 	while ((buf = net_buf_get(&att->tx_queue, K_NO_WAIT))) {
 		net_buf_unref(buf);
 	}
@@ -2736,6 +2751,7 @@ static void bt_att_connected(struct bt_l2cap_chan *chan)
 	}
 
 	att_chan_mtu_updated(att_chan);
+	att_chan_connected(att_chan);
 
 	k_work_init_delayable(&att_chan->timeout_work, att_timeout);
 
@@ -2753,6 +2769,13 @@ static void bt_att_disconnected(struct bt_l2cap_chan *chan)
 	if (!att_chan->att) {
 		BT_DBG("Ignore disconnect on detached ATT chan");
 		return;
+	}
+
+	if (att_chan->chan.tx.cid) {
+		/* This callback is called with cid=0x0000 if connection failed.
+		 * Do not generate disconnected callback for connection failure.
+		 */
+		att_chan_disconnected(att_chan);
 	}
 
 	att_chan_detach(att_chan);
@@ -3066,10 +3089,12 @@ int bt_eatt_connect(struct bt_conn *conn, uint8_t num_channels)
 {
 	struct bt_att_chan *att_chan = att_get_fixed_chan(conn);
 	struct bt_att *att = att_chan->att;
-	struct bt_l2cap_chan *chan[CONFIG_BT_EATT_MAX] = {};
-	int i = 0;
+	struct bt_l2cap_chan *chan[CONFIG_BT_EATT_MAX + 1] = {};
+	size_t offset = 0;
+	size_t i = 0;
+	int err;
 
-	if (num_channels > CONFIG_BT_EATT_MAX) {
+	if (num_channels > CONFIG_BT_EATT_MAX || num_channels == 0) {
 		return -EINVAL;
 	}
 
@@ -3087,8 +3112,43 @@ int bt_eatt_connect(struct bt_conn *conn, uint8_t num_channels)
 		return -ENOMEM;
 	}
 
-	return bt_l2cap_ecred_chan_connect(conn, chan, BT_EATT_PSM);
+	while (offset < i) {
+		/* bt_l2cap_ecred_chan_connect() uses the first L2CAP_ECRED_CHAN_MAX_PER_REQ
+		 * elements of the array or until a null-terminator is reached.
+		 */
+		err = bt_l2cap_ecred_chan_connect(conn, &chan[offset], BT_EATT_PSM);
+		if (err < 0) {
+			return err;
+		}
+
+		offset += L2CAP_ECRED_CHAN_MAX_PER_REQ;
+	}
+
+	return 0;
 }
+
+#if defined(CONFIG_BT_EATT_AUTO_CONNECT)
+void eatt_auto_connect(struct bt_conn *conn, uint8_t conn_err)
+{
+	int eatt_err;
+
+	if (conn_err) {
+		return;
+	}
+
+	eatt_err = att_schedule_eatt_connect(conn, CONFIG_BT_EATT_MAX);
+	if (eatt_err < 0) {
+		BT_WARN("Automatic creation of EATT bearers failed on "
+			"connection %s with error %d",
+			bt_addr_le_str_real(bt_conn_get_dst(conn)), eatt_err);
+	}
+}
+
+BT_CONN_CB_DEFINE(conn_callbacks) = {
+	.connected = eatt_auto_connect,
+};
+
+#endif /* CONFIG_BT_EATT_AUTO_CONNECT */
 
 int bt_eatt_disconnect(struct bt_conn *conn)
 {
@@ -3229,6 +3289,44 @@ static void att_chan_mtu_updated(struct bt_att_chan *updated_chan)
 		max_tx = MAX(max_tx, updated_chan->chan.tx.mtu);
 		max_rx = MAX(max_rx, updated_chan->chan.rx.mtu);
 		bt_gatt_att_max_mtu_changed(att->conn, max_tx, max_rx);
+	}
+}
+
+static void att_chan_connected(struct bt_att_chan *att_chan)
+{
+	struct bt_eatt_cb *cb;
+	struct bt_eatt_chan_info info = {
+		.conn = att_chan->att->conn,
+	};
+
+	if (att_chan->chan.tx.cid == BT_L2CAP_CID_ATT) {
+		/* Do not generate connected callback for the ATT Fixed Channel */
+		return;
+	}
+
+	SYS_SLIST_FOR_EACH_CONTAINER(&callback_list, cb, node) {
+		if (cb->chan_connected) {
+			cb->chan_connected(&info);
+		}
+	}
+}
+
+static void att_chan_disconnected(struct bt_att_chan *att_chan)
+{
+	struct bt_eatt_cb *cb;
+	struct bt_eatt_chan_info info = {
+		.conn = att_chan->att->conn,
+	};
+
+	if (att_chan->chan.tx.cid == BT_L2CAP_CID_ATT) {
+		/* Do not generate disconnected callback for the ATT Fixed Channel */
+		return;
+	}
+
+	SYS_SLIST_FOR_EACH_CONTAINER(&callback_list, cb, node) {
+		if (cb->chan_disconnected) {
+			cb->chan_disconnected(&info);
+		}
 	}
 }
 

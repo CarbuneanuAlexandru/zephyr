@@ -59,11 +59,53 @@ extern "C" {
 #if defined(CONFIG_BT_TESTING)
 
 int bt_eatt_disconnect_one(struct bt_conn *conn);
-int bt_eatt_connect(struct bt_conn *conn, uint8_t num_channels);
 size_t bt_eatt_count(struct bt_conn *conn);
 
 #endif /* CONFIG_BT_TESTING */
+
+/** @brief Connect Enhanced ATT channels
+ *
+ * Sends a series of Credit Based Connection Requests to connect @p num_channels
+ * Enhanced ATT channels. The peer may have limited resources and fewer channels
+ * may be created.
+ *
+ * @param conn The connection to send the request on
+ * @param num_channels The number of Enhanced ATT beares to request.
+ * Must be in the range 1 - @kconfig{CONFIG_BT_EATT_MAX}, inclusive.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ * @retval -EINVAL if @p num_channels is not in the allowed range.
+ * @retval -EINVAL if @p conn is NULL.
+ * @retval -ENOMEM if less than @p num_channels are allocated.
+ * @retval 0 in case of success
+ */
+int bt_eatt_connect(struct bt_conn *conn, uint8_t num_channels);
 #endif /* CONFIG_BT_EATT */
+
+/* EATT channel information */
+struct bt_eatt_chan_info {
+	/* The connection the EATT channel belongs to */
+	struct bt_conn *conn;
+};
+
+/** @brief EATT callback structure. */
+struct bt_eatt_cb {
+	/** @brief An EATT channel has been connected. */
+	void (*chan_connected)(const struct bt_eatt_chan_info *info);
+
+	/** @brief An EATT channel has been disconnected. */
+	void (*chan_disconnected)(const struct bt_eatt_chan_info *info);
+
+	sys_snode_t node;
+};
+
+/** @brief Register EATT callbacks.
+ *
+ *  Register callbacks to monitor the state of EATT.
+ *
+ *  @param cb Callback struct.
+ */
+void bt_eatt_cb_register(struct bt_eatt_cb *cb);
 
 #ifdef __cplusplus
 }
